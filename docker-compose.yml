@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pulsewatch-postgres
+    environment:
+      POSTGRES_DB: pulsewatch
+      POSTGRES_USER: pulsewatch
+      POSTGRES_PASSWORD: pulsewatch
+    ports:
+      - "5432:5432"
+    volumes:
+      - pulsewatch_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulsewatch -d pulsewatch"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: pulsewatch-redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+    container_name: pulsewatch-backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://pulsewatch:pulsewatch@postgres:5432/pulsewatch?schema=public
+      CORS_ORIGIN: http://localhost:4173
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: http://localhost:3000
+        VITE_WS_BASE: ws://localhost:3000
+    container_name: pulsewatch-frontend
+    environment:
+      PORT: 4173
+      HOST: 0.0.0.0
+    ports:
+      - "4173:4173"
+    depends_on:
+      - backend
+
+volumes:
+  pulsewatch_pg:
